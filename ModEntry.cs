@@ -604,18 +604,6 @@ internal class ModEntry : Mod
         if (Game1.currentMinigame != null)
             return true;
 
-        // screen transition/warp detection
-        if (Game1.isWarping)
-            return true;
-
-        // global fade detection
-        if (Game1.globalFade)
-            return true;
-
-        // fade to black detection
-        if (Game1.fadeToBlack)
-            return true;
-
         // movie theater playback
         if (Game1.currentLocation is MovieTheater)
         {
@@ -629,8 +617,6 @@ internal class ModEntry : Mod
         {
             var menuName = Game1.activeClickableMenu.GetType().Name;
 
-            if (menuName == "DialogueBox" && Game1.eventUp)
-                return true;
             if (menuName.Contains("Event"))
                 return true;
         }
