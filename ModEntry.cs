@@ -62,6 +62,9 @@ internal class ModEntry : Mod
     /// <summary>Whether time is temporarily unfrozen for a cutscene.</summary>
     private bool InCutsceneUnfreeze;
 
+    /// <summary>Whether a real event/cutscene (not just a screen fade) occurred during the current cutscene unfreeze period.</summary>
+    private bool CutsceneHadEvent;
+
     /// <summary>The saved gameTimeInterval value from before the game update. Used to restore it after the update.</summary>
     private int SavedGameTimeInterval;
 
@@ -146,6 +149,7 @@ internal class ModEntry : Mod
         this.CutsceneEndedAtTick = 0;
         this.InPostCutsceneDelay = false;
         this.InCutsceneUnfreeze = false;
+        this.CutsceneHadEvent = false;
     }
 
     /// <inheritdoc cref="IMultiplayerEvents.ModMessageReceived"/>
@@ -308,14 +312,33 @@ internal class ModEntry : Mod
                 this.WasTimeFrozenBeforeCutscene = this.IsTimeFrozen;
                 this.InPostCutsceneDelay = false;
                 this.InCutsceneUnfreeze = true;
+                this.CutsceneHadEvent = false;
                 this.Monitor.Log($"Cutscene started. Time was {(this.WasTimeFrozenBeforeCutscene ? "frozen" : "not frozen")} before.", LogLevel.Trace);
             }
-            // cutscene just ended — start the delay timer
+            // cutscene just ended
             else if (!isInCutscene && this.WasInCutscene)
             {
-                this.CutsceneEndedAtTick = e.Ticks;
-                this.InPostCutsceneDelay = true;
-                this.Monitor.Log($"Cutscene ended. Starting {PostCutsceneDelayTicks} tick delay before restoring freeze state.", LogLevel.Trace);
+                if (this.CutsceneHadEvent)
+                {
+                    // real event ended — apply delay so the post-event fade-in can finish
+                    this.CutsceneEndedAtTick = e.Ticks;
+                    this.InPostCutsceneDelay = true;
+                    this.Monitor.Log($"Cutscene ended. Starting {PostCutsceneDelayTicks} tick delay before restoring freeze state.", LogLevel.Trace);
+                }
+                else
+                {
+                    // was just a screen fade (warp/transition), not a real event — restore immediately
+                    this.InPostCutsceneDelay = false;
+                    this.InCutsceneUnfreeze = false;
+                    this.Monitor.Log("Screen fade ended (no event detected). Restoring freeze state immediately.", LogLevel.Trace);
+                }
+            }
+
+            // track whether a real event occurred during this cutscene period
+            if (isInCutscene && this.InCutsceneUnfreeze && !this.CutsceneHadEvent)
+            {
+                if (Game1.eventUp || Game1.CurrentEvent != null || Game1.currentMinigame != null)
+                    this.CutsceneHadEvent = true;
             }
 
             this.WasInCutscene = isInCutscene;
@@ -602,6 +625,15 @@ internal class ModEntry : Mod
 
         // mini-game detection
         if (Game1.currentMinigame != null)
+            return true;
+
+        // screen fade detection — catches the fade-to-black phase before eventUp is set,
+        // which some cutscenes (especially modded) need time flowing to initialize.
+        // The post-cutscene delay is only applied when a real event occurred (tracked by
+        // CutsceneHadEvent), so plain warp fades don't leak time.
+        if (Game1.globalFade)
+            return true;
+        if (Game1.fadeToBlack)
             return true;
 
         // movie theater playback
