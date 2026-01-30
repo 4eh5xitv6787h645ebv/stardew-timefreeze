@@ -1,25 +1,91 @@
-using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
+using System.Runtime.Serialization;
+using cantorsdust.Common;
+using StardewValley;
 
-namespace Omegasis.TimeFreeze.Framework
+namespace TimeSpeed.Framework;
+
+/// <summary>The mod configuration model.</summary>
+internal class ModConfig
 {
-    /// <summary>The mod configuration.</summary>
-    internal class ModConfig
+    /*********
+    ** Accessors
+    *********/
+    /// <summary>Whether to change tick length on festival days.</summary>
+    public bool EnableOnFestivalDays { get; set; } = true;
+
+    /// <summary>Whether to show a message about the time settings when you enter a location.</summary>
+    public bool LocationNotify { get; set; } = false;
+
+    /// <summary>Whether to let time flow normally during cutscenes and events, then restore freeze state after.</summary>
+    public bool UnpauseTimeDuringCutscenes { get; set; } = true;
+
+    /// <summary>The time speed for in-game locations, measured in seconds per in-game minute.</summary>
+    public ModSecondsPerMinuteConfig SecondsPerMinute { get; set; } = new();
+
+    /// <summary>The mod configuration for where time should be frozen.</summary>
+    public ModFreezeTimeConfig FreezeTime { get; set; } = new();
+
+    /// <summary>When hosting a save in multiplayer, whether other players can manage the time too.</summary>
+    public bool LetFarmhandsManageTime { get; set; } = true;
+
+    /// <summary>The keyboard bindings used to control the flow of time. See available keys at <a href="https://msdn.microsoft.com/en-us/library/microsoft.xna.framework.input.keys.aspx" />.</summary>
+    public ModControlsConfig Keys { get; set; } = new();
+
+
+    /*********
+    ** Public methods
+    *********/
+    /// <summary>Get whether time should be frozen at a given location.</summary>
+    /// <param name="location">The game location.</param>
+    public bool ShouldFreeze(GameLocation? location)
     {
-        public SortedDictionary<string, bool> freezeTimeInThisLocation { get; set; } = new SortedDictionary<string, bool>();
+        return this.FreezeTime.ShouldFreeze(location);
+    }
 
-        /// <summary>Whether time should be unfrozen while the player is swimming in the vanilla bathhouse.</summary>
-        public bool PassTimeWhileSwimmingInBathhouse { get; set; } = true;
+    /// <summary>Get whether the time should be frozen at a given time of day based on the <see cref="ModFreezeTimeConfig.AnywhereAtTime"/> option.</summary>
+    /// <param name="time">The time of day in 24-hour military format (e.g. 1600 for 8pm).</param>
+    public bool ShouldFreeze(int time)
+    {
+        return time >= this.FreezeTime.AnywhereAtTime;
+    }
 
-        /// <summary>Checks if just one player meets the conditions to freeze time, and then freeze time.</summary>
-        public bool freezeIfEvenOnePlayerMeetsTimeFreezeConditions { get; set; } = false;
+    /// <summary>Get whether the time should be frozen at a given time of day based on the <see cref="ModFreezeTimeConfig.PassOut"/> option.</summary>
+    /// <param name="time">The time of day in 24-hour military format (e.g. 1600 for 8pm).</param>
+    public bool ShouldFreezeBeforePassingOut(int time)
+    {
+        return time >= 2550 && this.FreezeTime.PassOut;
+    }
 
-        /// <summary>Checks if the majority of players can freeze time and then freeze time.</summary>
-        public bool freezeIfMajorityPlayersMeetsTimeFreezeConditions { get; set; } = true;
+    /// <summary>Get whether time settings should be applied on a given day.</summary>
+    /// <param name="season">The season to check.</param>
+    /// <param name="dayOfMonth">The day of month to check.</param>
+    public bool ShouldScale(Season season, int dayOfMonth)
+    {
+        return this.EnableOnFestivalDays || !Utility.isFestivalDay(dayOfMonth, season);
+    }
 
-        /// <summary>Checks if all players can freeze time and if so, do so.</summary>
-        public bool freezeIfAllPlayersMeetTimeFreezeConditions { get; set; } = false;
+    /// <summary>Get the number of milliseconds per minute to apply for a location.</summary>
+    /// <param name="location">The game location.</param>
+    public int GetMillisecondsPerMinute(GameLocation? location)
+    {
+        return (int)(this.SecondsPerMinute.GetSecondsPerMinute(location) * 1000);
+    }
 
-        /// <summary>Whether to automatically unpause time during cutscenes/events and restore the freeze state afterward.</summary>
-        public bool UnpauseTimeDuringCutscenes { get; set; } = true;
+
+    /*********
+    ** Private methods
+    *********/
+    /// <summary>The method called after the config file is deserialized.</summary>
+    /// <param name="context">The deserialization context.</param>
+    [OnDeserialized]
+    [SuppressMessage("ReSharper", "NullCoalescingConditionIsAlwaysNotNullAccordingToAPIContract", Justification = SuppressReasons.ValidatesNullability)]
+    [SuppressMessage("ReSharper", "UnusedMember.Local", Justification = SuppressReasons.UsedViaReflection)]
+    [SuppressMessage("ReSharper", "UnusedParameter.Local", Justification = SuppressReasons.UsedViaReflection)]
+    private void OnDeserializedMethod(StreamingContext context)
+    {
+        this.SecondsPerMinute ??= new ModSecondsPerMinuteConfig();
+        this.FreezeTime ??= new ModFreezeTimeConfig();
+        this.Keys ??= new ModControlsConfig();
     }
 }
